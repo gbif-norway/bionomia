@@ -1,0 +1,56 @@
+version: '3'
+
+services:
+  es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.0
+    container_name: es01
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - ./elastic-data01:/usr/share/elasticsearch/data
+  redis:
+    image: redis:6.0-buster
+  db:
+    image: mariadb:latest
+    expose:
+      - 3306
+    environment:
+      - MYSQL_DATABASE=bionomia
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d  # In mariadb, any sql files in /db are used to build database automatically
+  web:
+    build: .
+    image: bionomia:latest
+    command: rackup -p 4567 -o 0.0.0.0 config.ru
+    expose:
+      - 4567
+    volumes:
+      - .:/code
+    ports:
+      - "4567:4567"
+  spark:
+    image: docker.io/bitnami/spark:3-debian-10
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    expose:
+      - 8080
+    volumes:
+      - ./spark:/opt/bitnami/spark/ivy:z  # Necessary for write access
+    command: sh -c "curl -L -o /opt/bitnami/spark/jars/mysql-connector-java-8.0.20.jar https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.20/mysql-connector-java-8.0.20.jar && /opt/bitnami/scripts/spark/run.sh"
+# spark-shell --jars /opt/bitnami/spark/jars/mysql-connector-java-8.0.20.jar --conf spark.jars.ivy=/opt/bitnami/spark/ivy --packages org.apache.spark:spark-avro_2.12:3.0.0 --driver-memory 5G
+  spark-worker-1:
+    image: docker.io/bitnami/spark:3-debian-10
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
